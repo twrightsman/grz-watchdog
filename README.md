@@ -10,6 +10,7 @@ Idea:
 TODO:
  - [ ] actual implementations of the commands
  - [ ] initial ad-hoc testing
+ - [ ] generate `local_case_id` for each submission, i.e. do not use the object key as that contains the `tanG` atm.
  - [ ] test setup
  - [ ] proper error handling
  - [ ] better consistency between branching within a rule (based on params) or between rules (based on requested inputs)
