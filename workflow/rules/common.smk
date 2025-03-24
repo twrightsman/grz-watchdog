@@ -10,7 +10,7 @@ import boto3
 from snakemake.io import from_queue, Wildcards
 
 SENTINEL = object()
-INPUT_QUEUE = queue.Queue()
+INPUT_QUEUE: queue.Queue = queue.Queue()
 
 
 def update_submission_queue(bucket_name: str, key: str):
@@ -20,7 +20,7 @@ def update_submission_queue(bucket_name: str, key: str):
 # TODO: use md5sum of key as local_case_id
 # Global state to track seen metadata files
 # Read existing state from state/metadata.jsonl
-seen_metadata_files = defaultdict(dict)
+seen_metadata_files: defaultdict[str, dict] = defaultdict(dict)
 with open("state/metadata.jsonl", "r") as f:
     for line in f:
         obj = json.loads(line.strip())
@@ -39,7 +39,7 @@ def check_buckets():
 
     s3 = session.resource("s3", endpoint_url=endpoint_url)
     state_file = config["monitor"].get("state_file", "state/metadata.jsonl")
-    lock = FileLock(state_file + ".lock")
+    lock = FileLock(f"{state_file}.lock")
 
     sleep = int(config["monitor"].get("interval", "3600"))
 
@@ -80,13 +80,15 @@ def list_metadata_files(bucket_name: str, s3: boto3.resource) -> list[tuple[str,
     return keys
 
 
-def setup_updater():
+def setup_updater() -> threading.Thread:
     return threading.Thread(target=check_buckets)
+
+
+UPDATE_THREAD: threading.Thread | None = None
 
 
 def fetch_submission_queue():
     if config["monitor"].get("active", False):
-        global UPDATE_THREAD
         UPDATE_THREAD = setup_updater()
         UPDATE_THREAD.start()
         return from_queue(INPUT_QUEUE, finish_sentinel=SENTINEL)
@@ -97,10 +99,11 @@ def fetch_submission_queue():
 def stop_updater(timeout: float | None = None):
     INPUT_QUEUE.put(SENTINEL)
     INPUT_QUEUE.join()
-    UPDATE_THREAD.join(timeout=timeout)
+    if UPDATE_THREAD is not None:
+        UPDATE_THREAD.join(timeout=timeout)
 
 
-def check_validation_flag(wildcards):
+def check_validation_flag(wildcards: Wildcards) -> bool:
     """
     Reads the qc_flag file to determine if QC is necessary.
     """
@@ -110,7 +113,7 @@ def check_validation_flag(wildcards):
         return f.read().strip() == "true"
 
 
-def check_qc_flag(wildcards):
+def check_qc_flag(wildcards: Wildcards) -> bool:
     """
     Reads the qc_flag file to determine if QC is necessary.
     """
@@ -120,7 +123,7 @@ def check_qc_flag(wildcards):
         return f.read().strip() == "true"
 
 
-def check_consent_flag(wildcards):
+def check_consent_flag(wildcards: Wildcards) -> bool:
     """
     Reads the consent_flag file to determine if consent is given.
     """
@@ -130,14 +133,14 @@ def check_consent_flag(wildcards):
         return f.read().strip() == "true"
 
 
-def get_target_public_key(wildcards: Wildcards):
+def get_target_public_key(wildcards: Wildcards) -> str:
     if check_consent_flag(wildcards):
         return config["ghga"]["public_key"]
     else:
         return config["grz_internal"]["public_key"]
 
 
-def get_s3_config(wildcards: Wildcards):
+def get_s3_config(wildcards: Wildcards) -> dict:
     if check_consent_flag(wildcards):
         return config["ghga"]["s3_config"]
     else:
