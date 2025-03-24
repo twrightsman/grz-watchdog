@@ -39,7 +39,7 @@ def check_buckets():
 
     s3 = session.resource("s3", endpoint_url=endpoint_url)
     state_file = config["monitor"].get("state_file", "state/metadata.jsonl")
-    lock = FileLock(state_file)
+    lock = FileLock(state_file + ".lock")
 
     sleep = int(config["monitor"].get("interval", "3600"))
 
@@ -59,7 +59,7 @@ def check_buckets():
             bucket_files[key] = state
 
             with lock:
-                with open("state/metadata.jsonl", "a") as f:
+                with open(state_file, "a") as f:
                     f.write(
                         json.dumps({"bucket": bucket_name, "key": key, "state": state})
                         + "\n"
