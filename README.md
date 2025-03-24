@@ -15,3 +15,5 @@ TODO:
  - [ ] proper error handling (check for WorkflowError and KeyboardInterruption etc and handle gracefully)
  - [ ] better consistency between branching within a rule (based on params) or between rules (based on requested inputs)
  - [ ] threads + resource definitions for each rule
+ - [ ] explain how to configure profiles to optionally make use of [slurm executor](https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm.html) or [kubernetes executor](https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/kubernetes.html)
+ - [ ] use [s3 storage plugin](https://snakemake.github.io/snakemake-plugin-catalog/plugins/storage/s3.html) where applicable
