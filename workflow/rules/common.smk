@@ -93,10 +93,12 @@ def fetch_submission_queue():
     else:
         return []
 
+
 def stop_updater(timeout: float | None = None):
     INPUT_QUEUE.put(SENTINEL)
     INPUT_QUEUE.join()
     UPDATE_THREAD.join(timeout=timeout)
+
 
 def check_validation_flag(wildcards):
     """

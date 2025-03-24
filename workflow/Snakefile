@@ -239,6 +239,9 @@ rule upload:
 
 
 rule update_taetigkeitsbericht:
+    """
+    Update the Taetigkeitsbericht with information from the respective submission.
+    """
     input:
         metadata="results/{bucket_name}/metadata/{key}.json",
         pruefbericht="results/{bucket_name}/pruefbericht/{key}",
@@ -253,6 +256,11 @@ rule update_taetigkeitsbericht:
 
 
 rule finalize:
+    """
+    Target rule for each submission.
+    This rule does not really do anything, except explicitly state what needs to happen (which inputs are required)
+    in order for a submission to be considered "completed".
+    """
     input:
         uploaded="results/{bucket_name}/uploaded/{key}",
         pruefbericht="results/{bucket_name}/pruefbericht/{key}",
