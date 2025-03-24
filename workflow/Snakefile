@@ -1,0 +1,268 @@
+from snakemake.io import temp, directory
+from snakemake.ioutils import branch
+from snakemake.utils import min_version
+
+min_version("9.1.1")
+
+
+container: "docker://condaforge/miniforge3:24.11.3-2"
+
+
+configfile: "config/config.yaml"
+
+
+include: "rules/common.smk"
+
+
+GHGA_PUBLIC_KEY = "GHGA_PUBLIC_KEY"
+GRZ_INTERNAL_PUBLIC_KEY = "GRZ_INTERNAL_PUBLIC_KEY"
+
+
+rule all:
+    input:
+        fetch_submission_queue(),
+    default_target: True
+
+
+rule download:
+    """
+    Download a submission from S3 to the local filesystem. 
+    Could probably also be done with s3 storage plugin.
+    """
+    input:
+        s3_config="config/s3_config/grz_internal.yaml",
+    output:
+        data=temp(directory("results/{bucket_name}/downloaded/{key}")),
+    log:
+        "logs/{bucket_name}/download/{key}.log",
+    params:
+        submission_id="TODO: get submission id somehow",
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        (grz-cli download --submission-id {params.submission_id} --output-dir {output.data} --config-file {input.s3_config}) 2> {log}
+        """
+
+
+rule decrypt:
+    """
+    Decrypt the downloaded submission using grz-cli.
+    """
+    input:
+        data="results/{bucket_name}/downloaded/{key}",
+    output:
+        data=temp(directory("results/{bucket_name}/decrypted/{key}")),
+    log:
+        "logs/{bucket_name}/decrypt/{key}.log",
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        grz-cli decrypt {input.data} 2> {log}
+        """
+
+
+rule metadata:
+    """
+    Extract metadata from the decrypted submission for some subsequent steps.
+    """
+    input:
+        data="results/{bucket_name}/decrypted/{key}",
+    output:
+        metadata=temp("results/{bucket_name}/metadata/{key}.json"),
+    log:
+        "logs/{bucket_name}/metadata/{key}.log",
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        (cp '{input.data}/metadata/metadata.json' {output.metadata}) 2> {log}
+        """
+
+
+rule check_consent:
+    """
+    Check if the submission has consent (using grz-cli, not yet implemented).
+    """
+    input:
+        data="results/{bucket_name}/decrypted/{key}",
+    output:
+        consent_flag=temp("results/{bucket_name}/consent_flag/{key}"),
+    log:
+        "logs/{bucket_name}/check_consent/{key}.log",
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        (grz-cli check-consent {input.data} > {output.consent_flag}) 2> {log}
+        """
+
+
+rule validate_metadata:
+    """
+    Validate the submission using grz-cli.
+    """
+    input:
+        data="results/{bucket_name}/decrypted/{key}",
+    output:
+        validation_flag=temp("results/{bucket_name}/validation_flag/{key}"),
+        validation_errors=temp("results/{bucket_name}/validation_errors/{key}.txt"),
+    log:
+        "logs/{bucket_name}/validate_metadata/{key}.log",
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        grz-cli validate --submission-dir {input.data} 2> {output.validation_errors}
+        (if [ $? -eq 0 ]; then
+            echo "true" > {output.validation_flag}
+        else
+            echo "false" > {output.validation_flag}
+        fi) 2> {log}
+        """
+
+
+rule determine_if_qc_is_necessary:
+    """
+    Flip a biased coin to determine if QC is necessary.
+    """
+    input:
+        validation="results/{bucket_name}/validation_flag/{key}",
+    output:
+        needs_qc=temp("results/{bucket_name}/qc_flag/{key}"),
+    log:
+        "logs/{bucket_name}/determine_if_qc_is_necessary/{key}.log",
+    params:
+        is_valid=check_validation_flag,
+    shell:
+        """
+        (if [[ {params.is_valid} != 'True' ]]; then
+            echo "false" > {output}
+        else
+            if [ $(shuf -i 1-100 -n 1) -le 2 ]; then
+                echo "true" > {output}
+            else
+                echo "false" > {output}
+            fi
+        fi) 2> {log}
+        """
+
+
+rule qc:
+    """
+    Perform QC on the submission using the QC nextflow pipeline.
+    """
+    input:
+        data="results/{bucket_name}/decrypted/{key}",
+        validation="results/{bucket_name}/validation/{key}",
+    output:
+        qc_results=temp("results/{bucket_name}/qc/{key}"),
+    handover: "TODO: handover to QC pipeline"
+
+
+rule pruefbericht:
+    """
+    Generate a Prüfbericht for the submission.
+    """
+    input:
+        branch(
+            check_qc_flag,
+            then="results/{bucket_name}/qc/{key}",
+            otherwise="results/{bucket_name}/validation/{key}",
+        ),
+    output:
+        pruefbericht=temp("results/{bucket_name}/pruefbericht/{key}"),
+    log:
+        "logs/{bucket_name}/pruefbericht/{key}.log",
+    shell:
+        """
+        # (generate pruefbericht using {input}) 2> {log}
+        """
+
+
+rule report_pruefbericht_to_bfarm:
+    """
+    Report the Prüfbericht to BfArM.
+    """
+    input:
+        pruefbericht="results/{bucket_name}/pruefbericht/{key}",
+    output:
+        answer=temp("results/{bucket_name}/pruefbericht_answer/{key}"),
+    log:
+        "logs/{bucket_name}/report_pruefbericht_to_bfarm/{key}.log",
+    shell:
+        """(echo 'Use BfArM API and record response' > {output.answer}) 2> {log}"""
+
+
+rule re_encrypt:
+    """
+    Re-encrypt the submission using the target public key, depending on whether research consent was given.
+    """
+    input:
+        data="results/{bucket_name}/decrypted/{key}",
+        pruefbericht="results/{bucket_name}/pruefbericht/{key}",
+    output:
+        data=temp(directory("results/{bucket_name}/re-encrypt/{key}")),
+    log:
+        "logs/{bucket_name}/re-encrypt/{key}.log",
+    params:
+        target_public_key=get_target_public_key,
+        config=lambda wildcards: {"TODO": "config"},
+    conda:
+        "envs/grz-cli.yaml"
+    shell:
+        """
+        (grz-cli encrypt --config {params.config} --submission-dir {input.data} --output-dir {output.data}) 2> {log}
+        """
+
+
+rule upload:
+    """
+    Upload data to the target s3 bucket.
+    """
+    input:
+        data="results/{bucket_name}/re-encrypt/{key}",
+    output:
+        uploaded=temp("results/{bucket_name}/uploaded/{key}"),
+    log:
+        "logs/{bucket_name}/upload/{key}.log",
+    params:
+        s3_config=get_s3_config,
+    shell:
+        """
+        # (
+        # upload to s3 using {params.s3_config}
+        # echo "done" > {output.uploaded}
+        #) 2> {log}
+        """
+
+
+rule update_taetigkeitsbericht:
+    input:
+        metadata="results/{bucket_name}/metadata/{key}.json",
+        pruefbericht="results/{bucket_name}/pruefbericht/{key}",
+    output:
+        taetigkeitsbericht=temp("results/{bucket_name}/taetigkeitsbericht/{key}.pdf"),
+    log:
+        "logs/{bucket_name}/update_taetigkeitsbericht/{key}.log",
+    shell:
+        """
+        # (generate taetigkeitsbericht using {input.metadata} and {input.pruefbericht}, as well as some other data TBD) 2> {log}
+        """
+
+
+rule finalize:
+    input:
+        uploaded="results/{bucket_name}/uploaded/{key}",
+        pruefbericht="results/{bucket_name}/pruefbericht/{key}",
+        pruefbericht_answer="results/{bucket_name}/pruefbericht_answer/{key}",
+        taetigkeitsbericht="results/{bucket_name}/taetigkeitsbericht/{key}.pdf",
+    output:
+        target="results/{bucket_name}/target/{key}",
+    log:
+        "logs/{bucket_name}/finalize/{key}.log",
+    shell:
+        """
+        (echo "done" > {output.target}) 2> {log}
+        """
