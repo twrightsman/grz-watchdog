@@ -19,6 +19,7 @@ class MetadataRecord:
 class MetadataDb:
     def __init__(self, db_path: PathLike):
         self._db_path = db_path
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self.create_table()
 
     def create_table(

@@ -1,0 +1,5 @@
+.snakemake
+stats
+results
+tests
+tmp

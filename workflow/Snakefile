@@ -29,7 +29,7 @@ INPUT_QUEUE.put("tmp/queue-workaround")
 # that occurs _sometimes_ when the queue is initially empty.
 rule queue_initially_empty_workaround:
     output:
-        "tmp/queue-workaround",
+        temp("tmp/queue-workaround"),
     shell:
         """
         sleep 30s

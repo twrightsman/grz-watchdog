@@ -1,36 +1,50 @@
 services:
+  s3service:
+    image: quay.io/minio/minio:latest
+    volumes:
+      - ./data:/data
+    command: server --console-address ":9001" /data
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+
+  initialize-s3service:
+    image: quay.io/minio/mc
+    depends_on:
+      s3service:
+        condition: service_healthy
+    env_file: minio.env
+    entrypoint: >
+      /bin/sh -c '
+      until (/usr/bin/mc config host add s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}") do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc alias set s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
+      /usr/bin/mc mb s3service/"$${BUCKET_NAME}";
+      /usr/bin/mc policy set download myminio/test;
+      /usr/bin/mc admin user add s3service "$${ACCESS_KEY}" "$${SECRET_KEY}";
+      /usr/bin/mc admin policy attach s3service readwrite --user "$${ACCESS_KEY}";
+      touch .initialized
+      '
+    healthcheck:
+      test: ["CMD", "test", "-f", ".initialized"]
+
   grz-watchdog:
     build:
       context: ../
       dockerfile: Dockerfile
 
-    volumes:
-      - ..:/workspace:cached
 #    command: conda run -n grz-watchdog snakemake --cores 2 --sdm conda --sdm apptainer
 #    entrypoint: >
 #        /bin/bash -c '
 #        conda run -n grz-watchdog snakemake --cores 2 --sdm conda --sdm apptainer;
 #        exit 0;
 #        '
-
-  s3service:
-    image: quay.io/minio/minio:latest
-    command: server --console-address ":9001" /data
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    env_file: minio.env
-
-  initialize-s3service:
-    image: quay.io/minio/mc
     depends_on:
-      - s3service
-    entrypoint: >
-      /bin/sh -c '
-      /usr/bin/mc alias set s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
-      /usr/bin/mc mb s3service/"$${BUCKET_NAME}";
-      /usr/bin/mc admin user add s3service "$${ACCESS_KEY}" "$${SECRET_KEY}";
-      /usr/bin/mc admin policy attach s3service readwrite --user "$${ACCESS_KEY}";
-      exit 0;
-      '
-    env_file: minio.env
+      s3service:
+        condition: service_healthy
+      initialize-s3service:
+        condition: service_healthy
