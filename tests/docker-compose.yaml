@@ -24,13 +24,10 @@ services:
       until (/usr/bin/mc config host add s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}") do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc alias set s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
       /usr/bin/mc mb s3service/"$${BUCKET_NAME}";
-      /usr/bin/mc policy set download myminio/test;
       /usr/bin/mc admin user add s3service "$${ACCESS_KEY}" "$${SECRET_KEY}";
       /usr/bin/mc admin policy attach s3service readwrite --user "$${ACCESS_KEY}";
-      touch .initialized
       '
-    healthcheck:
-      test: ["CMD", "test", "-f", ".initialized"]
+    restart: "no"
 
   grz-watchdog:
     build:
@@ -47,4 +44,4 @@ services:
       s3service:
         condition: service_healthy
       initialize-s3service:
-        condition: service_healthy
+        condition: service_completed_successfully
