@@ -1,34 +1,101 @@
-import json
 import queue
 import threading
 import time
-from collections import defaultdict
-from filelock import FileLock
-
 import boto3
+import sqlite3
 
 from snakemake.io import from_queue, Wildcards
+from dataclasses import dataclass
+from os import PathLike
+
+
+@dataclass
+class MetadataRecord:
+    bucket: str
+    key: str
+    state: str
+
+
+class MetadataDb:
+    def __init__(self, db_path: PathLike):
+        self._db_path = db_path
+        self.create_table()
+
+    def create_table(
+        self,
+    ):
+        print(f"Creating metadata table in {self._db_path}")
+        with sqlite3.connect(self._db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS metadata (
+                bucket TEXT,
+                key TEXT,
+                state TEXT,
+                PRIMARY KEY (bucket, key)
+            )
+            """
+            )
+        print("Metadata table created")
+
+    def get_state(self, bucket: str, key: str) -> str | None:
+        print(f"Getting state for {bucket}/{key}")
+        with sqlite3.connect(self._db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+            SELECT state FROM metadata WHERE bucket = ? AND key = ?
+            """,
+                (bucket, key),
+            )
+
+            result = cursor.fetchone()
+            if result is None:
+                return None
+            else:
+                return result[0]
+
+    def update_state(self, bucket: str, key: str, state: str):
+        print(f"Updating state for {bucket}/{key} to {state}")
+        with sqlite3.connect(self._db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+            INSERT OR REPLACE INTO metadata (bucket, key, state) VALUES (?, ?, ?)
+            """,
+                (bucket, key, state),
+            )
+
+    def records(self, bucket: str) -> list[MetadataRecord]:
+        print(f"Getting records for {bucket}")
+        with sqlite3.connect(self._db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+            SELECT * FROM metadata WHERE bucket = ?
+            """,
+                (bucket,),
+            )
+
+            return [MetadataRecord(*row) for row in cursor.fetchall()]
+
 
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
+metadata_db = MetadataDb(config["monitor"]["metadata_db"])
 
 
 def update_submission_queue(bucket_name: str, key: str):
+    print(f"Updating submission queue for {bucket_name}/{key}")
     INPUT_QUEUE.put(f"results/{bucket_name}/target/{key}")
 
 
 # TODO: use md5sum of key as local_case_id
-# Global state to track seen metadata files
-# Read existing state from state/metadata.jsonl
-seen_metadata_files: defaultdict[str, dict] = defaultdict(dict)
-with open("state/metadata.jsonl", "r") as f:
-    for line in f:
-        obj = json.loads(line.strip())
-        bucket, key, state = obj["bucket"], obj["key"], obj["state"]
-        seen_metadata_files[bucket][key] = state
 
 
 def check_buckets():
+    print("Initializing S3 session …")
     session = boto3.Session(
         aws_access_key_id=config["grz_inbox"]["s3_config"]["access_key_id"],
         aws_secret_access_key=config["grz_inbox"]["s3_config"]["secret_access_key"],
@@ -36,71 +103,66 @@ def check_buckets():
 
     endpoint_url = config["grz_inbox"]["s3_config"]["endpoint_url"]
     buckets = config["grz_inbox"]["s3_config"]["buckets"]
+    print(f"Monitoring buckets {buckets} …")
 
+    print("Retrieving S3 resource …")
     s3 = session.resource("s3", endpoint_url=endpoint_url)
-    state_file = config["monitor"].get("state_file", "state/metadata.jsonl")
-    lock = FileLock(f"{state_file}.lock")
-
     sleep = int(config["monitor"].get("interval", "3600"))
 
     while True:
-        keys = []
         for bucket_name in buckets:
-            keys.append(list_metadata_files(bucket_name, s3))
+            print(f"Checking bucket {bucket_name} for new submissions …")
+            bucket_keys: set[str] = list_metadata_objects(bucket_name, s3)
+            print(f"Found {len(bucket_keys)} metadata files in bucket {bucket_name}")
+            bucket_db_records = metadata_db.records(bucket_name)
+            bucket_db_keys = {record.key for record in bucket_db_records}
 
-        for bucket_name, key in keys:
-            bucket_files = seen_metadata_files.get(bucket_name, {})
-            if key not in bucket_files:
+            new_keys = bucket_keys - bucket_db_keys
+            existing_keys = bucket_keys & bucket_db_keys
+            missing_keys = bucket_db_keys - bucket_keys
+
+            for key in new_keys:
+                print(f"Found new submission '{key}' in bucket '{bucket_name}'")
                 state = "new"
-                print(f"Found new metadata file: {key} in bucket {bucket_name}")
                 update_submission_queue(bucket_name, key)
-            else:
-                state = "seen"
-            bucket_files[key] = state
+                metadata_db.update_state(bucket_name, key, state)
 
-            with lock:
-                with open(state_file, "a") as f:
-                    f.write(
-                        json.dumps({"bucket": bucket_name, "key": key, "state": state})
-                        + "\n"
-                    )
+            for key in existing_keys:
+                print(f"Submission '{key}' in bucket '{bucket_name}' already seen")
+                state = "seen"
+                metadata_db.update_state(bucket_name, key, state)
+
+            for key in missing_keys:
+                print(f"Submission '{key}' in bucket '{bucket_name}' is missing")
+                state = "missing"
+                metadata_db.update_state(bucket_name, key, state)
+
+            print(INPUT_QUEUE.qsize())
 
         time.sleep(sleep)
 
 
-def list_metadata_files(bucket_name: str, s3: boto3.resource) -> list[tuple[str, str]]:
+def list_metadata_objects(bucket_name: str, s3: boto3.resource) -> set[str]:
     print(f"Checking bucket {bucket_name}")
     bucket = s3.Bucket(bucket_name)
-    keys: list[tuple[str, str]] = []
+    keys: set[tuple[str, str]] = set()
     for obj in bucket.objects.all():
         if obj.key.endswith("metadata.json"):
             # TODO: key → local_case_id, for now use top-level directory name
             key, *_ = obj.key.split("/")
-            keys.append((bucket_name, key))
+            keys.add(key)
     return keys
 
 
-def setup_updater() -> threading.Thread:
-    return threading.Thread(target=check_buckets)
+UPDATE_THREAD: threading.Thread = threading.Thread(target=check_buckets, daemon=False)
+UPDATE_THREAD.start()
 
 
-UPDATE_THREAD: threading.Thread | None = None
-
-
-def fetch_submission_queue():
-    if config["monitor"].get("active", False):
-        UPDATE_THREAD = setup_updater()
-        UPDATE_THREAD.start()
-        return from_queue(INPUT_QUEUE, finish_sentinel=SENTINEL)
-    else:
-        return []
-
-
+# FIXME: use this on SIGINT / keyboard interrupt, e.g. via signal module
 def stop_updater(timeout: float | None = None):
     INPUT_QUEUE.put(SENTINEL)
     INPUT_QUEUE.join()
-    if UPDATE_THREAD is not None:
-        UPDATE_THREAD.join(timeout=timeout)
+    UPDATE_THREAD.join(timeout=timeout)
 
 
 def check_validation_flag(wildcards: Wildcards) -> bool:

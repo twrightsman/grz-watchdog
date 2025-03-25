@@ -1,8 +1,10 @@
-from snakemake.io import temp, directory
+from snakemake.io import temp, directory, service, from_queue
 from snakemake.ioutils import branch
 from snakemake.utils import min_version
 
+
 min_version("9.1.1")
+print("Starting grz-watchdog", file=sys.stderr)
 
 
 container: "docker://condaforge/miniforge3:24.11.3-2"
@@ -20,16 +22,30 @@ include: "rules/common.smk"
 GHGA_PUBLIC_KEY = "GHGA_PUBLIC_KEY"
 GRZ_INTERNAL_PUBLIC_KEY = "GRZ_INTERNAL_PUBLIC_KEY"
 
+INPUT_QUEUE.put("tmp/queue-workaround")
+
+
+# This is a workaround for a bug (snakemake immediately exits)
+# that occurs _sometimes_ when the queue is initially empty.
+rule queue_initially_empty_workaround:
+    output:
+        "tmp/queue-workaround",
+    shell:
+        """
+        sleep 30s
+        echo "done" > {output}
+        """
+
 
 rule all:
     input:
-        fetch_submission_queue(),
+        from_queue(INPUT_QUEUE, finish_sentinel=SENTINEL),
     default_target: True
 
 
 rule download:
     """
-    Download a submission from S3 to the local filesystem. 
+    Download a submission from S3 to the local filesystem.
     Could probably also be done with s3 storage plugin.
     """
     input:

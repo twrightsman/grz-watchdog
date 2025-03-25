@@ -1,17 +1,15 @@
 monitor:
-  active: false
-  state_file: "state/metadata.jsonl"
-  interval: 3600 # in seconds
+  metadata_db: "state/metadata.sqlite"
+  interval: 10 # in seconds
 
 grz_inbox:
   public_key: "grz_inbox_public_key"
   s3_config:
-    endpoint_url: "https://foo.bar"
-    access_key_id: "access_key_id"
-    secret_access_key: "secret_access_key"
+    endpoint_url: "http://s3service:9000"  # or "http://127.0.0.1:9000"
+    access_key_id: "Gd4G0VqhHTmi28twgsmF"
+    secret_access_key: "KEx8ABzui36NhyXbiQwYXxps3HahqD7EKL54v65f"
     buckets:
-      - A
-      - B
+      - foo
 
 grz_internal:
   public_key: "grz_internal_public_key"
