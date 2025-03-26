@@ -1,10 +1,11 @@
 import queue
+import signal
 import threading
 import time
 import boto3
 
 from snakemake.io import from_queue, Wildcards
-from grz_watchdog import MetadataDb, MetadataRecord
+from grz_watchdog import MetadataDb, MetadataRecord, SubmissionState
 
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
@@ -48,18 +49,18 @@ def check_buckets():
 
             for key in new_keys:
                 print(f"Found new submission '{key}' in bucket '{bucket_name}'")
-                state = "new"
+                state = SubmissionState.new
                 update_submission_queue(bucket_name, key)
                 metadata_db.update_state(bucket_name, key, state)
 
             for key in existing_keys:
                 print(f"Submission '{key}' in bucket '{bucket_name}' already seen")
-                state = "seen"
+                state = SubmissionState.seen
                 metadata_db.update_state(bucket_name, key, state)
 
             for key in missing_keys:
                 print(f"Submission '{key}' in bucket '{bucket_name}' is missing")
-                state = "missing"
+                state = SubmissionState.missing
                 metadata_db.update_state(bucket_name, key, state)
 
             print(INPUT_QUEUE.qsize())
@@ -85,9 +86,11 @@ UPDATE_THREAD.start()
 
 # FIXME: use this on SIGINT / keyboard interrupt, e.g. via signal module
 def stop_updater(timeout: float | None = None):
+    print("Stopping updater…")
     INPUT_QUEUE.put(SENTINEL)
     INPUT_QUEUE.join()
     UPDATE_THREAD.join(timeout=timeout)
+    print("Stopped updater.")
 
 
 def check_validation_flag(wildcards: Wildcards) -> bool:
@@ -132,3 +135,11 @@ def get_s3_config(wildcards: Wildcards) -> dict:
         return config["ghga"]["s3_config"]
     else:
         return config["grz_internal"]["s3_config"]
+
+
+def signal_handler(sig, frame):
+    stop_updater(30)
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)

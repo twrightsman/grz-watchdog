@@ -30,11 +30,14 @@ Make use of continuously updated input files.
 
 
 ### Docker compose
-Comes with minio and minio-client (mc), sets up testing S3 storage, see `tests/docker-compose.yaml` for more info.
-1. ```docker compose build```
-2. ```docker compose up```
+Comes with minio and minio-client (mc), sets up testing S3 storage, see `docker-compose.yaml` for more info.
+Test config is in `tests/config`. Working directory is in `tests/workflow-workdir`.
+```sh
+docker compose up --build
+```
 
 ## TODO
+ - [ ] Find out how to gracefully stop the service to avoid snakemake lock issues.
  - [ ] actual implementations of the commands
  - [ ] initial ad-hoc testing
  - [ ] generate `local_case_id` for each submission, i.e. do not use the object key (as that contains the `tanG` atm) for storage in `grz_internal` / `ghga`.

@@ -12,4 +12,5 @@ COPY src/ src/
 RUN uv sync --locked
 RUN uv pip install .
 RUN mkdir /app/workdir
-ENTRYPOINT ["conda", "run", "-n", "grz-watchdog", "snakemake", "--cores", "2", "--sdm", "conda", "--verbose", "--directory", "/app/workdir"]
+COPY config workdir/config
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "grz-watchdog", "snakemake", "--cores", "2", "--sdm", "conda", "--verbose", "--directory", "/app/workdir"]
