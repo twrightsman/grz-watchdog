@@ -10,15 +10,15 @@ services:
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
 
   initialize-s3service:
     image: quay.io/minio/mc
     depends_on:
       s3service:
-        condition: service_healthy
-    env_file: minio.env
+        condition: service_started
+    env_file: tests/minio.env
     entrypoint: >
       /bin/sh -c '
       until (/usr/bin/mc config host add s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}") do echo '...waiting...' && sleep 1; done;
@@ -31,19 +31,21 @@ services:
 
   grz-watchdog:
     build:
-      context: ../
+      context: .
       dockerfile: Dockerfile
-
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./tests/workflow-workdir:/app/workdir
+      - ./tests/config:/app/workdir/config
+    depends_on:
+      s3service:
+        condition: service_started
+      initialize-s3service:
+        condition: service_completed_successfully
 #    command: conda run -n grz-watchdog snakemake --cores 2 --sdm conda --sdm apptainer
 #    entrypoint: >
 #        /bin/bash -c '
 #        conda run -n grz-watchdog snakemake --cores 2 --sdm conda --sdm apptainer;
 #        exit 0;
 #        '
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      s3service:
-        condition: service_healthy
-      initialize-s3service:
-        condition: service_completed_successfully
