@@ -40,6 +40,8 @@ services:
 #        conda run -n grz-watchdog snakemake --cores 2 --sdm conda --sdm apptainer;
 #        exit 0;
 #        '
+    environment:
+      - PYTHONUNBUFFERED=1
     depends_on:
       s3service:
         condition: service_healthy
