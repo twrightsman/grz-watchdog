@@ -9,16 +9,30 @@ Make use of continuously updated input files.
 
 ## Setup
 
+
+### Manual
 1. Setup conda environment
     ```sh
     conda env create -n grz-watchdog -f environment.yaml
     conda activate grz-watchdog
     ```
+2. Install helper package locally:
+   ```sh
+   uv sync --locked
+   uv pip install -e .
+   ```
 
-2. Adjust `config/config.yaml` to your needs.
+3. Adjust `config/config.yaml` to your needs.
 
-3. (optional) Make a copy of `workflow/profiles/default` and adjust to your needs (e.g. by adding `executor: slurm`) and use `--workflow-profile` to point to that modified copy.
+4. (optional) Make a copy of `workflow/profiles/default` and adjust to your needs (e.g. by adding `executor: slurm`) and use `--workflow-profile` to point to that modified copy.
 
+5. Invoke `snakemake`
+
+
+### Docker compose
+Comes with minio and minio-client (mc), sets up testing S3 storage, see `tests/docker-compose.yaml` for more info.
+1. ```docker compose build```
+2. ```docker compose up```
 
 ## TODO
  - [ ] actual implementations of the commands

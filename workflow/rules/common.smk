@@ -2,85 +2,9 @@ import queue
 import threading
 import time
 import boto3
-import sqlite3
 
 from snakemake.io import from_queue, Wildcards
-from dataclasses import dataclass
-from os import PathLike
-
-
-@dataclass
-class MetadataRecord:
-    bucket: str
-    key: str
-    state: str
-
-
-class MetadataDb:
-    def __init__(self, db_path: PathLike):
-        self._db_path = db_path
-        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.create_table()
-
-    def create_table(
-        self,
-    ):
-        print(f"Creating metadata table in {self._db_path}")
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-            CREATE TABLE IF NOT EXISTS metadata (
-                bucket TEXT,
-                key TEXT,
-                state TEXT,
-                PRIMARY KEY (bucket, key)
-            )
-            """
-            )
-        print("Metadata table created")
-
-    def get_state(self, bucket: str, key: str) -> str | None:
-        print(f"Getting state for {bucket}/{key}")
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-            SELECT state FROM metadata WHERE bucket = ? AND key = ?
-            """,
-                (bucket, key),
-            )
-
-            result = cursor.fetchone()
-            if result is None:
-                return None
-            else:
-                return result[0]
-
-    def update_state(self, bucket: str, key: str, state: str):
-        print(f"Updating state for {bucket}/{key} to {state}")
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-            INSERT OR REPLACE INTO metadata (bucket, key, state) VALUES (?, ?, ?)
-            """,
-                (bucket, key, state),
-            )
-
-    def records(self, bucket: str) -> list[MetadataRecord]:
-        print(f"Getting records for {bucket}")
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-            SELECT * FROM metadata WHERE bucket = ?
-            """,
-                (bucket,),
-            )
-
-            return [MetadataRecord(*row) for row in cursor.fetchall()]
-
+from grz_watchdog import MetadataDb, MetadataRecord
 
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()

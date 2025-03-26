@@ -9,4 +9,5 @@ dependencies:
   - snakemake-executor-plugin-slurm
   - snakemake-executor-plugin-kubernetes
   - filelock =3.18.0
+  - uv =0.6.9
 
