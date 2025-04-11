@@ -43,7 +43,7 @@ rule all:
     default_target: True
 
 
-rule download:
+rule download_submission:
     """
     Download a submission from S3 to the local filesystem.
     Could probably also be done with s3 storage plugin.
@@ -64,12 +64,13 @@ rule download:
         """
 
 
-rule decrypt:
+rule decrypt_submission:
     """
     Decrypt the downloaded submission using grz-cli.
     """
     input:
         data="results/{bucket_name}/downloaded/{key}",
+        config="TODO: get config file for decryption",
     output:
         data=temp(directory("results/{bucket_name}/decrypted/{key}")),
     log:
@@ -78,11 +79,11 @@ rule decrypt:
         "envs/grz-cli.yaml"
     shell:
         """
-        grz-cli decrypt {input.data} 2> {log}
+        grz-cli decrypt --config-file {input.config} {input.data} 2> {log}
         """
 
 
-rule metadata:
+rule extract_metadata:
     """
     Extract metadata from the decrypted submission for some subsequent steps.
     """
@@ -168,7 +169,7 @@ rule determine_if_qc_is_necessary:
         """
 
 
-rule qc:
+rule perform_qc:
     """
     Perform QC on the submission using the QC nextflow pipeline.
     """
@@ -180,7 +181,7 @@ rule qc:
     handover: "TODO: handover to QC pipeline"
 
 
-rule pruefbericht:
+rule generate_pruefbericht:
     """
     Generate a Prüfbericht for the submission.
     """
@@ -214,7 +215,7 @@ rule report_pruefbericht_to_bfarm:
         """(echo 'Use BfArM API and record response' > {output.answer}) 2> {log}"""
 
 
-rule re_encrypt:
+rule re_encrypt_submission:
     """
     Re-encrypt the submission using the target public key, depending on whether research consent was given.
     """
@@ -236,7 +237,7 @@ rule re_encrypt:
         """
 
 
-rule upload:
+rule upload_to_archive:
     """
     Upload data to the target s3 bucket.
     """
@@ -274,7 +275,7 @@ rule update_taetigkeitsbericht:
         """
 
 
-rule finalize:
+rule finalize_submission:
     """
     Target rule for each submission.
     This rule does not really do anything, except explicitly state what needs to happen (which inputs are required)

@@ -4,7 +4,7 @@ import threading
 import time
 import boto3
 
-from snakemake.io import from_queue, Wildcards
+from snakemake.io import Wildcards
 from grz_watchdog import MetadataDb, MetadataRecord, SubmissionState
 
 SENTINEL = object()
