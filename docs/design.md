@@ -7,14 +7,16 @@ flowchart TD
     n1["Inbox"] --> n2["grz-cli download"]
     n2 --> n3["grz-cli decrypt"]
     n3 --> n4["grz-cli validate"]
-    n4 --> n5["QC?"] & n12["Submission Database"]
-    n5 -- 98% --> n6["Submit Prüfbericht"]
-    n5 -- "&gt;=2% and &gt;=1/month" --> n7["QC pipeline"]
+    n4 --> n5["Extra QC?"] & n12["Submission Database + Logs"]
+    n5 -- No (98%) --> n6["Submit Prüfbericht"]
+    n5 -- "Yes<br>(&gt;=2% and &gt;=1/month)" --> n7["QC Pipeline"]
     n7 --> n6 & n12
-    n6 --> n9["Consent?"] & n12
-    n9 --> n11["Encrypt"]
+    n6 --> n12 & n14["QC Pass?"]
+    n9["Consent?"] --> n11["Encrypt"]
     n11 --> n8["Archive<br>(Fully Consented)"] & n10["Archive<br>(Other)"] & n12
-    n12 --> n13["Tätigkeitsbericht"]
+    n12 --> n13["Tätigkeitsbericht<br>(Quarterly)"]
+    n14 -- Yes --> n9
+    n14 -- No  --> n15["Delete Submission Files"]
 
     n1@{ shape: das}
     n2@{ shape: proc}
@@ -24,11 +26,13 @@ flowchart TD
     n12@{ shape: db}
     n6@{ shape: proc}
     n7@{ shape: proc}
+    n14@{ shape: decision}
     n9@{ shape: decision}
     n11@{ shape: proc}
     n8@{ shape: das}
     n10@{ shape: das}
     n13@{ shape: doc}
+    n15@{ shape: proc}
 ```
 
 
@@ -36,48 +40,38 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    n1["Uploading"] --> n2["Uploaded"] & n6["Upload Aborted"]
+    n1["Uploading"] --> n2["Uploaded"]
     n2 --> n3["Downloading"]
-    n3 --> n4["Downloaded"] & n5["Download Failed"]
+    n3 --> n4["Downloaded"] & n5["Error"]
     n4 --> n7["Decrypting"]
-    n7 --> n8["Decrypted"] & n9["Decryption Failed"]
+    n7 --> n8["Decrypted"] & n5
     n8 --> n10["Validating"]
-    n10 --> n11["Validated"] & n12["Invalid"]
+    n10 --> n11["Validated"] & n5
     n11 -- 2% --> n13["QC Running"]
-    n13 --> n14["QC Failed"] & n15["QC Finished"]
+    n13 --> n15["QC Finished"] & n5
     n11 -- 98% --> n15
-    n15 --> n16["Prüfbericht Submitted"] & n17["Prüfbericht Failed"]
-    n17 --> n16
-    n14 --> n13
+    n15 --> n16["Prüfbericht Submitted"] & n5
     n16 --> n18["Encrypting"]
-    n18 --> n19["Encrypted"] & n22["Encryption Failed"]
+    n18 --> n19["Encrypted"] & n5
     n19 --> n20["Archiving"]
-    n20 --> n21["Archived"]
-    n20 --> n23["Archiving Failed"]
+    n20 --> n21["Archived"] & n5
 
     n1@{ shape: rect}
     n2@{ shape: rect}
-    n6@{ shape: rect}
     n3@{ shape: rect}
     n4@{ shape: rect}
     n5@{ shape: rect}
     n7@{ shape: rect}
     n8@{ shape: rect}
-    n9@{ shape: rect}
     n10@{ shape: rect}
     n11@{ shape: rect}
-    n12@{ shape: rect}
     n13@{ shape: rect}
-    n14@{ shape: rect}
     n15@{ shape: rect}
     n16@{ shape: rect}
-    n17@{ shape: rect}
     n18@{ shape: rect}
     n19@{ shape: rect}
-    n22@{ shape: rect}
     n20@{ shape: rect}
     n21@{ shape: rect}
-    n23@{ shape: rect}
 ```
 
 
