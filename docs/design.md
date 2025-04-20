@@ -85,10 +85,11 @@ flowchart TD
 
 ## Submission Database
 
-Submissions are tracked within an SQLite database at each GRZ.
+Submissions are tracked within an SQL database at each GRZ.
 
 This database consists of three tables, described in the following sections.
 
+(?) Do we need a schema versioning system or can we let sqlmodel + alembic handle this?
 
 ### `submissions`
 
@@ -137,3 +138,14 @@ Need both metadata/LE-provided numbers and GRZ computed numbers.
 - Decide on retry logic for test report API
 - Can use [Florian's tool](https://github.com/Hoeze/snakemk_util) to test snakemake rules outside of a workflow
 - verify submission ID on our side since it is deterministic
+- archive logs (with submission or not?)
+- track resource consumption for each submission to estimate costs
+  - inbox storage / time
+  - archive storage
+  - CPU hours
+  - memory
+  - walltime
+  - others?
+- updating watchdog
+    1. Ctrl+C to initiate shutdown of old watchdog and stop accepting new submissions
+    2. Start new watchdog instance that starts on unprocessed submissions
