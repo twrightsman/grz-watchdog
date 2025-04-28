@@ -8,20 +8,28 @@ Most importantly, all steps that `grz-watchdog` manages should also be executabl
 ```mermaid
 flowchart TD
     n1["Inbox"] --> n2["grz-cli download"]
+    n2 -.-> n12
     n2 --> n3["grz-cli decrypt"]
+    n3 -.-> n12
     n3 --> n4["grz-cli validate"]
-    n4 --> n12["Submission Database + Logs"] & n15["Valid?"]
-    n5["Extra QC?"] -- No --> n6["Submit Prüfbericht"]
+    n4 -.-> n12["Submission Database + Logs"]
+    n4 --> n15["Valid?"]
+    n5["Extra QC?"] -- No --> n9["Consent?"]
     n5 -- "Yes" --> n7["QC Pipeline"]
-    n7 --> n6 & n12
-    n6 --> n12 & n9["Consent?"]
+    n7 --> n9
+    n7 -.-> n12
+    n6 -.-> n12
     n9 -- Yes --> n11["Encrypt"]
     n9 -- No/Partial --> n14["Encrypt"]
-    n11 --> n8["Archive<br>(Fully Consented)"] & n12
+    n11 --> n8["Archive<br>(Fully Consented)"]
+    n11 -.-> n12
     n12 --> n13["Tätigkeitsbericht<br>(Quarterly)"]
     n14 --> n10["Archive<br>(Other)"]
+    n14 -.-> n12
     n15 -- Yes --> n5
-    n15 -- No  --> n6
+    n15 -- No  --> n9
+    n10 --> n6["Submit Prüfbericht"]
+    n8 --> n6
 
     n1@{ shape: das}
     n2@{ shape: proc}
@@ -57,12 +65,13 @@ flowchart TD
     n10 --> n11["Validated"] & n5
     n11 -- 2% of valid --> n13["QCing"]
     n13 --> n15["QCed"] & n5
-    n15 --> n16["Prüfbericht Submitted"] & n5
-    n16 --> n18["Encrypting"]
+    n15 --> n18["Encrypting"]
     n18 --> n19["Encrypted"] & n5
     n19 --> n20["Archiving"]
     n20 --> n21["Archived"] & n5
-    n11 -- 98% of valid and all invalid  --> n16
+    n11 -- 98% of valid and all invalid  --> n18
+    n21 --> n16["Reported"]
+    n21 -- "Report Failed" --> n5
 
     n1@{ shape: rect}
     n2@{ shape: rect}
@@ -96,10 +105,9 @@ This database consists of three tables, described in the following sections.
 Columns:
 
 1. `id` (primary key, str)
-2. `tanG` (str | None)
+2. `tanG` (unique nullable str)
     - after phase 0 this column must be null once a submission's test report has been successfully submitted.
-    - need not be unique if, for example, there was a mistake in the first submission.
-3. `pseudonym` (str | None)
+3. `pseudonym` (nullable str)
     - during phase 0 this will be the local case ID
     - if tanG is null then we know that this is a real RKI psuedonym instead of a local case ID
 
@@ -127,8 +135,6 @@ Need both metadata/LE-provided numbers and GRZ computed numbers.
 
 ### `grz-cli download`
 
-- perhaps a `--scan` or `--auto` flag to check all inboxes for submissions and their upload states and start downloading the oldest unprocessed one
-  - submissions with a `metadata.json` are considered complete and ready for processing, as this is the last file `grz-cli upload` uploads
 - prevent snakemake from filling up disk space by downloading lots of submissions while a few cores are free
   - idea: subworkflow for each submission with a disk resource that depends on the submission data size (QC pipeline takes up >4x input data size total disk space, including input data)
 
@@ -139,6 +145,7 @@ Need both metadata/LE-provided numbers and GRZ computed numbers.
 - Can use [Florian's tool](https://github.com/Hoeze/snakemk_util) to test snakemake rules outside of a workflow
 - verify submission ID on our side since it is deterministic
 - archive logs (with submission or not?)
+  - ensure QC pipeline version + commit hash stored
 - track resource consumption for each submission to estimate costs
   - inbox storage / time
   - archive storage
@@ -149,3 +156,4 @@ Need both metadata/LE-provided numbers and GRZ computed numbers.
 - updating watchdog
     1. Ctrl+C to initiate shutdown of old watchdog and stop accepting new submissions
     2. Start new watchdog instance that starts on unprocessed submissions
+- what if we get same submission ID and/or tanG after cleaning from inbox?
