@@ -126,17 +126,10 @@ Columns:
 1. `submission_id` (primary key, str, maps to `id` in `submissions`)
 2. `timestamp` (str, ISO 8601 format)
 3. `state` (enum of lifecycle states)
-
-
-### `submission_metrics`
-
-Columns:
-
-1. `submission_id` (primary key, str, maps to `id` in `submissions`)
-
-QC metrics are in the following columns: TBD.
-
-Need both metadata/LE-provided numbers and GRZ computed numbers.
+4. `data` (additional data on state in JSON)
+  - e.g. public key fingerprint of key used to encrypt
+  - QC metrics after pipeline finished
+    - Need both metadata/LE-provided numbers and GRZ computed numbers.
 
 ## Pipeline Details
 
@@ -151,8 +144,8 @@ Need both metadata/LE-provided numbers and GRZ computed numbers.
 - Decide on retry logic for test report API
 - Can use [Florian's tool](https://github.com/Hoeze/snakemk_util) to test snakemake rules outside of a workflow
 - verify submission ID on our side since it is deterministic
-- archive logs (with submission or not?)
-  - ensure QC pipeline version + commit hash stored
+- need to verify submission metadata QC numbers are within 5% of internal QC pipeline numbers
+- ensure QC pipeline version + commit hash stored in logs
 - track resource consumption for each submission to estimate costs
   - inbox storage / time
   - archive storage
