@@ -125,11 +125,24 @@ Columns:
 
 1. `submission_id` (primary key, str, maps to `id` in `submissions`)
 2. `timestamp` (str, ISO 8601 format)
-3. `state` (enum of lifecycle states)
-4. `data` (additional data on state in JSON)
+3. `author` (str? key signature?)
+4. `state` (enum of lifecycle states)
+5. `data` (additional data on state in JSON)
   - e.g. public key fingerprint of key used to encrypt
   - QC metrics after pipeline finished
     - Need both metadata/LE-provided numbers and GRZ computed numbers.
+
+### `submission_changes`
+
+Columns:
+
+1. `submission_id` (primary key, str, maps to `id` in `submissions`)
+2. `timestamp` (str, ISO 8601 format)
+3. `author`
+4. `change` (e.g. modification, deletion, transfer to BfArM)
+5. `data`
+
+Very similar to submission lifecycle table, merge with?
 
 ## Pipeline Details
 
