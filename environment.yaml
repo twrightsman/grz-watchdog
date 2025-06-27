@@ -11,5 +11,8 @@ dependencies:
   - filelock =3.18.0
   - pip
   - pip:
-      - grzctl @ https://github.com/BfArM-MVH/grz-tools/tree/main/packages/grzctl
-
+      - grzctl@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grzctl
+      - grz-db@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-db
+      - grz-cli@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-cli
+      - grz-common@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-common
+      - grz-pydantic-models@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-pydantic-models

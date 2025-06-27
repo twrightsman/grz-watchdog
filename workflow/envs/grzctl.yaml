@@ -3,4 +3,4 @@ channels:
   - bioconda
   - nodefaults
 dependencies:
-  - grz-cli ==0.3.0
+  - grzctl
