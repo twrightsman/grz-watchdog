@@ -10,7 +10,7 @@ inbox:
     access_key_id: "Gd4G0VqhHTmi28twgsmF"
     secret_access_key: "KEx8ABzui36NhyXbiQwYXxps3HahqD7EKL54v65f"
     buckets:
-      - foo
+      - inbox
 
 nonconsented:
   keys:
@@ -20,7 +20,7 @@ nonconsented:
     access_key_id: "access_key_id"
     secret_access_key: "secret_access_key"
     buckets:
-      - archive
+      - nonconsented
 
 consented:
   keys:
@@ -30,4 +30,4 @@ consented:
     access_key_id: "access_key_id"
     secret_access_key: "secret_access_key"
     buckets:
-      - inbox
+      - consented
