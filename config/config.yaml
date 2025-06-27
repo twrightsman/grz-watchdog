@@ -2,32 +2,9 @@ monitor:
   submission_db: "sqlite:///state/metadata.sqlite"
   interval: 10 # in seconds
 
-inbox:
-  keys:
-    public_key: "inbox_public_key"
-  s3:
-    endpoint_url: "http://s3service:9000"  # or "http://127.0.0.1:9000"
-    access_key_id: "Gd4G0VqhHTmi28twgsmF"
-    secret_access_key: "KEx8ABzui36NhyXbiQwYXxps3HahqD7EKL54v65f"
-    buckets:
-      - inbox
-
-nonconsented:
-  keys:
-    public_key: "nonconsented_public_key"
-  s3:
-    endpoint_url: "https://foo.bar"
-    access_key_id: "access_key_id"
-    secret_access_key: "secret_access_key"
-    buckets:
-      - nonconsented
-
-consented:
-  keys:
-    public_key: "consented_public_key"
-  s3:
-    endpoint_url: "https://foo.bar"
-    access_key_id: "access_key_id"
-    secret_access_key: "secret_access_key"
-    buckets:
-      - consented
+buckets:
+  inbox:
+    inbox-le-1: "buckets/inbox-le-1.config.yaml"
+    inbox-le-2: "buckets/inbox-le-2.config.yaml"
+  consented: "buckets/consented.yaml"
+  nonconsented: "buckets/nonconsented.yaml"
