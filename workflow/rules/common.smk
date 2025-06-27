@@ -1,15 +1,18 @@
+import datetime
+import json
 import queue
 import signal
+import subprocess
 import threading
 import time
-import boto3
+from tempfile import NamedTemporaryFile
+
+import yaml
 
 from snakemake.io import Wildcards
-from grz_watchdog import MetadataDb, MetadataRecord, SubmissionState
 
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
-metadata_db = MetadataDb(config["monitor"]["metadata_db"])
 
 
 def update_submission_queue(bucket_name: str, key: str):
@@ -17,71 +20,44 @@ def update_submission_queue(bucket_name: str, key: str):
     INPUT_QUEUE.put(f"results/{bucket_name}/target/{key}")
 
 
-# TODO: use md5sum of key as local_case_id
-
-
 def check_buckets():
-    print("Initializing S3 session …")
-    session = boto3.Session(
-        aws_access_key_id=config["grz_inbox"]["s3_config"]["access_key_id"],
-        aws_secret_access_key=config["grz_inbox"]["s3_config"]["secret_access_key"],
-    )
-
-    endpoint_url = config["grz_inbox"]["s3_config"]["endpoint_url"]
-    buckets = config["grz_inbox"]["s3_config"]["buckets"]
+    buckets = config["inbox"]["s3"]["buckets"]
     print(f"Monitoring buckets {buckets} …")
-
-    print("Retrieving S3 resource …")
-    s3 = session.resource("s3", endpoint_url=endpoint_url)
     sleep = int(config["monitor"].get("interval", "3600"))
 
     while True:
         for bucket_name in buckets:
-            print(f"Checking bucket {bucket_name} for new submissions …")
-            bucket_keys: set[str] = list_metadata_objects(bucket_name, s3)
-            print(f"Found {len(bucket_keys)} metadata files in bucket {bucket_name}")
-            bucket_db_records = metadata_db.records(bucket_name)
-            bucket_db_keys = {record.key for record in bucket_db_records}
-
-            new_keys = bucket_keys - bucket_db_keys
-            existing_keys = bucket_keys & bucket_db_keys
-            missing_keys = bucket_db_keys - bucket_keys
-
-            for key in new_keys:
-                print(f"Found new submission '{key}' in bucket '{bucket_name}'")
-                state = SubmissionState.new
-                update_submission_queue(bucket_name, key)
-                metadata_db.update_state(bucket_name, key, state)
-
-            for key in existing_keys:
-                print(f"Submission '{key}' in bucket '{bucket_name}' already seen")
-                state = SubmissionState.seen
-                metadata_db.update_state(bucket_name, key, state)
-
-            for key in missing_keys:
-                print(f"Submission '{key}' in bucket '{bucket_name}' is missing")
-                state = SubmissionState.missing
-                metadata_db.update_state(bucket_name, key, state)
+            with NamedTemporaryFile("w+t") as config_file:
+                inbox_config = config["inbox"]
+                del inbox_config["buckets"]
+                inbox_config["bucket"] = bucket_name
+                yaml.dump(inbox_config, config_file.name)
+                available_submissions = json.loads(
+                    subprocess.run(
+                        ["grzctl", "list", "--config-file", config_file, "--json"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout
+                )
+                available_submissions = list(
+                    sorted(
+                        filter(lambda r: r.complete is True, available_submissions),
+                        key=lambda r: datetime.datetime.strptime(
+                            r.oldest_upload, "%Y-%m-%d %H:%M:%S"
+                        ),
+                    )
+                )
+                print(available_submissions)
+                for available_submission in available_submissions:
+                    INPUT_QUEUE.put(available_submission.submission_id)
 
             print(INPUT_QUEUE.qsize())
 
         time.sleep(sleep)
 
 
-def list_metadata_objects(bucket_name: str, s3: boto3.resource) -> set[str]:
-    print(f"Checking bucket {bucket_name}")
-    bucket = s3.Bucket(bucket_name)
-    keys: set[tuple[str, str]] = set()
-    for obj in bucket.objects.all():
-        if obj.key.endswith("metadata.json"):
-            # TODO: key → local_case_id, for now use top-level directory name
-            key, *_ = obj.key.split("/")
-            keys.add(key)
-    return keys
-
-
 UPDATE_THREAD: threading.Thread = threading.Thread(target=check_buckets, daemon=False)
-UPDATE_THREAD.start()
 
 
 # FIXME: use this on SIGINT / keyboard interrupt, e.g. via signal module
@@ -125,16 +101,16 @@ def check_consent_flag(wildcards: Wildcards) -> bool:
 
 def get_target_public_key(wildcards: Wildcards) -> str:
     if check_consent_flag(wildcards):
-        return config["ghga"]["public_key"]
+        return config["consented"]["public_key"]
     else:
-        return config["grz_internal"]["public_key"]
+        return config["nonconsented"]["public_key"]
 
 
-def get_s3_config(wildcards: Wildcards) -> dict:
+def get_s3(wildcards: Wildcards) -> dict:
     if check_consent_flag(wildcards):
-        return config["ghga"]["s3_config"]
+        return config["consented"]["s3"]
     else:
-        return config["grz_internal"]["s3_config"]
+        return config["nonconsented"]["s3"]
 
 
 def signal_handler(sig, frame):

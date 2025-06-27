@@ -1,4 +1,4 @@
-storage grz_inbox:
+storage inbox:
     provider="s3",
     # optionally add custom settings here if needed
     # alternatively they can be passed via command line arguments
@@ -21,7 +21,7 @@ storage grz_inbox:
     retries=...,
 
 
-storage grz_internal:
+storage nonconsented:
     provider="s3",
     max_requests_per_second=...,
     endpoint_url=...,
@@ -33,7 +33,7 @@ storage grz_internal:
     retries=...,
 
 
-storage ghga:
+storage consented:
     provider="s3",
     max_requests_per_second=...,
     endpoint_url=...,

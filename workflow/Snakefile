@@ -46,7 +46,7 @@ rule all:
 
 rule start:
     output:
-        running=temp("running")
+        running=temp("running"),
     run:
         UPDATE_THREAD.start()
         print("true", file=open(output.running, "wt"))
@@ -152,7 +152,6 @@ rule check_consent:
         """
 
 
-
 rule re_encrypt_submission:
     """
     Re-encrypt the submission using the target public key, depending on whether research consent was given.
@@ -235,7 +234,7 @@ rule determine_if_qc_is_necessary:
     """
     input:
         validation="results/{bucket_name}/validation_flag/{key}",
-        pruefbericht="results/{bucket_name}/pruefbericht_answer/{key}"
+        pruefbericht="results/{bucket_name}/pruefbericht_answer/{key}",
     output:
         needs_qc=temp("results/{bucket_name}/qc_flag/{key}"),
     log:
@@ -263,7 +262,7 @@ rule perform_qc:
     input:
         data="results/{bucket_name}/decrypted/{key}",
         validation="results/{bucket_name}/validation/{key}",
-        pruefbericht="results/{bucket_name}/pruefbericht_answer/{key}"
+        pruefbericht="results/{bucket_name}/pruefbericht_answer/{key}",
     output:
         qc_results=temp("results/{bucket_name}/qc/{key}"),
     handover: "TODO: handover to QC pipeline"
@@ -274,14 +273,14 @@ rule clean_submission_from_inbox:
         branch(
             check_qc_flag,
             then="results/{bucket_name}/qc/{key}",
-            otherwise="results/{bucket_name}/pruefbericht_answer/{key}"
-        )
+            otherwise="results/{bucket_name}/pruefbericht_answer/{key}",
+        ),
     output:
-        clean_results="results/{bucket_name}/clean_submission_from_inbox/{key}"
+        clean_results="results/{bucket_name}/clean_submission_from_inbox/{key}",
     params:
-        submission_id=get_submission_id
+        submission_id=get_submission_id,
     log:
-        "logs/{bucket_name}/clean_submission_from_inbox/{key}"
+        "logs/{bucket_name}/clean_submission_from_inbox/{key}",
     shell:
         """
         (grz-cli clean --submission-id {params.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) 2> {log}
