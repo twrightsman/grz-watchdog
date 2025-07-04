@@ -19,11 +19,13 @@ services:
       s3service:
         condition: service_started
     env_file: tests/minio.env
-    entrypoint: >
+    entrypoint: |
       /bin/sh -c '
       until (/usr/bin/mc config host add s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}") do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc alias set s3service http://s3service:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
-      /usr/bin/mc mb s3service/"$${BUCKET_NAME}";
+      for bucket in $${BUCKET_NAMES}; do
+        /usr/bin/mc mb s3service/"$${bucket}";
+      done;
       /usr/bin/mc admin user add s3service "$${ACCESS_KEY}" "$${SECRET_KEY}";
       /usr/bin/mc admin policy attach s3service readwrite --user "$${ACCESS_KEY}";
       '

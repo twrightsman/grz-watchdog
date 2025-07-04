@@ -9,5 +9,10 @@ dependencies:
   - snakemake-executor-plugin-slurm
   - snakemake-executor-plugin-kubernetes
   - filelock =3.18.0
-  - uv =0.6.9
-
+  - pip
+  - pip:
+      - grzctl@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grzctl
+      - grz-db@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-db
+      - grz-cli@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-cli
+      - grz-common@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-common
+      - grz-pydantic-models@git+https://github.com/BfArM-MVH/grz-tools#subdirectory=packages/grz-pydantic-models
