@@ -6,7 +6,7 @@ import subprocess
 import threading
 import time
 
-from snakemake.io import Wildcards, InputFiles
+from snakemake.io import Wildcards
 
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
@@ -62,7 +62,7 @@ def stop_updater(timeout: float | None = None):
     print("Stopped updater.")
 
 
-def get_ready_marker(wildcards):
+def get_ready_marker(wildcards: Wildcards) -> str:
     qc_flag_file = checkpoints.determine_if_qc_is_necessary.get(
         bucket_name=wildcards.bucket_name, submission_id=wildcards.submission_id
     ).output.needs_qc

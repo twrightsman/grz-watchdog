@@ -67,13 +67,13 @@ rule download_submission:
         "envs/grzctl.yaml"
     shell:
         """
-        (grz-cli download --submission-id {wildcards.submission_id} --output-dir {output.data} --config-file {input.s3_config}) 2> {log}
+        (grzctl download --submission-id {wildcards.submission_id} --output-dir {output.data} --config-file {input.s3_config}) 2> {log}
         """
 
 
 rule decrypt_submission:
     """
-    Decrypt the downloaded submission using grz-cli.
+    Decrypt the downloaded submission using grzctl.
     """
     input:
         data="results/{bucket_name}/downloaded/{submission_id}",
@@ -86,7 +86,7 @@ rule decrypt_submission:
         "envs/grzctl.yaml"
     shell:
         """
-        grz-cli decrypt --config-file {input.config} {input.data} 2> {log}
+        grzctl decrypt --config-file {input.config} {input.data} 2> {log}
         """
 
 
