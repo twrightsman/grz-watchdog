@@ -86,7 +86,7 @@ rule decrypt_submission:
         "envs/grzctl.yaml"
     shell:
         """
-        grzctl decrypt --config-file {input.config} {input.data} 2> {log}
+        (grzctl decrypt --config-file {input.config} {input.data}) 2> {log}
         """
 
 
@@ -125,12 +125,14 @@ rule validate_metadata:
         "envs/grzctl.yaml"
     shell:
         """
-        grzctl validate --submission-dir {input.data} 2> {output.validation_errors}
-        (if [ $? -eq 0 ]; then
-            echo "true" > {output.validation_flag}
-        else
-            echo "false" > {output.validation_flag}
-        fi) 2> {log}
+        (
+            grzctl validate --submission-dir {input.data} 2> {output.validation_errors}
+            if [ $? -eq 0 ]; then
+                echo "true" > {output.validation_flag}
+            else
+                echo "false" > {output.validation_flag}
+            fi
+        ) 2> {log}
         """
 
 
@@ -168,23 +170,19 @@ rule re_encrypt_submission:
         "logs/{bucket_name}/re_encrypt_submission/{submission_id}.log",
     conda:
         "envs/grzctl.yaml"
-    run:
-        from snakemake.shell import shell
-
-        with open(input.consent_flag) as f:
-            consent_given = f.read().strip() == "true"
-
-        if consent_given:
-            target_config = input.config_consented
-        else:
-            target_config = input.config_nonconsented
-
-        shell(
-            "(grzctl encrypt"
-            " --config-file {target_config}"
-            " --submission-dir {input.data}"
-            " --output-dir {output.data}) 2> {log}"
-        )
+    shell:
+        """
+        (
+            CONSENT=$(cat {input.consent_flag})
+            if [[ "$CONSENT" == "true" ]]; then
+                CONFIG_FILE="{input.config_consented}"
+            else
+                CONFIG_FILE="{input.config_nonconsented}"
+            fi
+            echo "Consent: $CONSENT. Using config file: $CONFIG_FILE"
+            grzctl encrypt --config-file "$CONFIG_FILE" --submission-dir {input.data} --output-dir {output.data}
+        ) > {log} 2>&1
+        """
 
 
 rule archive_submission:
@@ -200,20 +198,19 @@ rule archive_submission:
         archived=temp("results/{bucket_name}/archived/{submission_id}"),
     log:
         "logs/{bucket_name}/archive_submission/{submission_id}.log",
-    run:
-        from snakemake.shell import shell
-
-        with open(input.consent_flag) as f:
-            consent_given = f.read().strip() == "true"
-        if consent_given:
-            target_config = input.config_consented
-        else:
-            target_config = input.config_nonconsented
-
-        shell(
-            "(grzctl archive --config-file {target_config} TODO && "
-            "echo 'done' > {output.archived}) 2> {log}"
-        )
+    shell:
+        """
+        (
+            CONSENT=$(cat {input.consent_flag})
+            if [[ "$CONSENT" == "true" ]]; then
+                CONFIG_FILE="{input.config_consented}"
+            else
+                CONFIG_FILE="{input.config_nonconsented}"
+            fi
+            echo "Consent: $CONSENT. Using config file for archiving: $CONFIG_FILE"
+            grzctl archive --config-file "$CONFIG_FILE" TODO && echo 'done' > {output.archived}
+        ) > {log} 2>&1
+        """
 
 
 rule generate_pruefbericht:
@@ -229,15 +226,15 @@ rule generate_pruefbericht:
         "logs/{bucket_name}/generate_pruefbericht/{submission_id}.log",
     shell:
         """
-        IS_VALID=$(cat {input.validation_flag})
-
-        if [[ "$IS_VALID" == "true" ]]; then
-            pruefbericht_params=""
-        else
-            pruefbericht_params="--fail"
-        fi
-        
-        (grzctl pruefbericht --submission-dir {input.data} ${{pruefbericht_params}}) 2> {log}
+        (
+            IS_VALID=$(cat {input.validation_flag})
+            if [[ "$IS_VALID" == "true" ]]; then
+                pruefbericht_params=""
+            else
+                pruefbericht_params="--fail"
+            fi
+            grzctl pruefbericht --submission-dir {input.data} ${{pruefbericht_params}}
+        ) > {log} 2>&1
         """
 
 
@@ -268,18 +265,19 @@ checkpoint determine_if_qc_is_necessary:
         "logs/{bucket_name}/determine_if_qc_is_necessary/{submission_id}.log",
     shell:
         """
-        IS_VALID=$(cat {input.validation_flag})
-
-        # TODO replace with query in submission DB and sophisticated logic
-        (if [[ "$IS_VALID" != "true" ]]; then
-            echo "false" > {output.needs_qc}
-        else
-            if [ $(shuf -i 1-100 -n 1) -le 2 ]; then
-                echo "true" > {output.needs_qc}
-            else
+        (
+            IS_VALID=$(cat {input.validation_flag})
+            # TODO replace with query in submission DB and sophisticated logic
+            if [[ "$IS_VALID" != "true" ]]; then
                 echo "false" > {output.needs_qc}
+            else
+                if [ $(shuf -i 1-100 -n 1) -le 2 ]; then
+                    echo "true" > {output.needs_qc}
+                else
+                    echo "false" > {output.needs_qc}
+                fi
             fi
-        fi) 2> {log}
+        ) > {log} 2>&1
         """
 
 
@@ -346,10 +344,12 @@ rule finalize_submission:
         "logs/{bucket_name}/finalize_submission/{submission_id}.log",
     shell:
         """
-        CLEANED=$(cat {input.clean_results})
-        if [[ $"CLEANED" == "true" ]]; then
-            (echo "done" > {output.target}) 2> {log}
-        else
-            (echo "fail" > {output.target}) 2> {log}
-        fi
+        (
+            CLEANED=$(cat {input.clean_results})
+            if [[ $"CLEANED" == "true" ]]; then
+                echo "done" > {output.target}
+            else
+                echo "fail" > {output.target}
+            fi
+        ) > {log} 2>&1
         """
