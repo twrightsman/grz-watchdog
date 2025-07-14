@@ -8,8 +8,6 @@ import time
 from random import randint
 from typing import Any
 
-from snakemake.io import Wildcards
-
 SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
 

@@ -1,5 +1,4 @@
-from snakemake.io import temp, directory, service, from_queue
-from snakemake.ioutils import branch
+from snakemake.io import temp, directory, from_queue
 from snakemake.utils import min_version
 
 
@@ -18,9 +17,6 @@ include: "rules/common.smk"
 
 # include: "rules/storage.smk"
 
-
-GHGA_PUBLIC_KEY = "GHGA_PUBLIC_KEY"
-GRZ_INTERNAL_PUBLIC_KEY = "GRZ_INTERNAL_PUBLIC_KEY"
 
 # INPUT_QUEUE.put("tmp/queue-workaround")
 # # This is a workaround for a bug (snakemake immediately exits)
