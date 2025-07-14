@@ -59,6 +59,7 @@ rule download_submission:
     """
     input:
         s3_config="config/buckets/{bucket_name}.config.yaml",
+        db_config="config/db.config.yaml",
     output:
         data=temp(directory("results/{bucket_name}/downloaded/{submission_id}")),
     log:
@@ -67,7 +68,11 @@ rule download_submission:
         "envs/grzctl.yaml"
     shell:
         """
-        (grzctl download --submission-id {wildcards.submission_id} --output-dir {output.data} --config-file {input.s3_config}) 2> {log}
+        (
+        grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} downloading
+        grzctl download --submission-id {wildcards.submission_id} --output-dir {output.data} --config-file {input.s3_config}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+        grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} downloaded
+        ) > {log} 2>&1
         """
 
 
@@ -77,7 +82,8 @@ rule decrypt_submission:
     """
     input:
         data="results/{bucket_name}/downloaded/{submission_id}",
-        config="config/buckets/{bucket_name}.config.yaml",
+        s3_config="config/buckets/{bucket_name}.config.yaml",
+        db_config="config/db.config.yaml",
     output:
         data=temp(directory("results/{bucket_name}/decrypted/{submission_id}")),
     log:
@@ -86,7 +92,11 @@ rule decrypt_submission:
         "envs/grzctl.yaml"
     shell:
         """
-        (grzctl decrypt --config-file {input.config} {input.data}) 2> {log}
+        (
+        grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} decrypting
+        grzctl decrypt --config-file {input.s3_config} {input.data} || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+        grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} decrypted
+        ) > {log} 2>&1
         """
 
 
@@ -114,6 +124,7 @@ rule validate_metadata:
     """
     input:
         data="results/{bucket_name}/decrypted/{submission_id}",
+        db_config="config/db.config.yaml",
     output:
         validation_flag=temp("results/{bucket_name}/validation_flag/{submission_id}"),
         validation_errors=temp(
@@ -126,12 +137,14 @@ rule validate_metadata:
     shell:
         """
         (
-            grzctl validate --submission-dir {input.data} 2> {output.validation_errors}
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} validating
+            (grzctl validate --submission-dir {input.data} 2> {output.validation_errors}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
             if [ $? -eq 0 ]; then
                 echo "true" > {output.validation_flag}
             else
                 echo "false" > {output.validation_flag}
             fi
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} validated
         ) 2> {log}
         """
 
@@ -164,6 +177,7 @@ rule re_encrypt_submission:
         consent_flag="results/{bucket_name}/consent_flag/{submission_id}",
         config_consented=config["buckets"]["consented"],
         config_nonconsented=config["buckets"]["nonconsented"],
+        db_config="config/db.config.yaml",
     output:
         data=temp(directory("results/{bucket_name}/re-encrypt/{submission_id}")),
     log:
@@ -180,7 +194,9 @@ rule re_encrypt_submission:
                 CONFIG_FILE="{input.config_nonconsented}"
             fi
             echo "Consent: $CONSENT. Using config file: $CONFIG_FILE"
-            grzctl encrypt --config-file "$CONFIG_FILE" --submission-dir {input.data} --output-dir {output.data}
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} encrypting
+            grzctl encrypt --config-file "$CONFIG_FILE" --submission-dir {input.data} --output-dir {output.data} || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} encrypted
         ) > {log} 2>&1
         """
 
@@ -194,6 +210,7 @@ rule archive_submission:
         consent_flag="results/{bucket_name}/consent_flag/{submission_id}",
         config_consented=config["buckets"]["consented"],
         config_nonconsented=config["buckets"]["nonconsented"],
+        db_config="config/db.config.yaml",
     output:
         archived=temp("results/{bucket_name}/archived/{submission_id}"),
     log:
@@ -208,7 +225,9 @@ rule archive_submission:
                 CONFIG_FILE="{input.config_nonconsented}"
             fi
             echo "Consent: $CONSENT. Using config file for archiving: $CONFIG_FILE"
-            grzctl archive --config-file "$CONFIG_FILE" TODO && echo 'done' > {output.archived}
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} archiving
+            (grzctl archive --config-file "$CONFIG_FILE" TODO && echo 'done' > {output.archived}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} archived
         ) > {log} 2>&1
         """
 
@@ -244,12 +263,17 @@ rule report_pruefbericht_to_bfarm:
     """
     input:
         pruefbericht="results/{bucket_name}/pruefbericht/{submission_id}",
+        db_config="config/db.config.yaml",
     output:
         answer=temp("results/{bucket_name}/pruefbericht_answer/{submission_id}"),
     log:
         "logs/{bucket_name}/report_pruefbericht_to_bfarm/{submission_id}.log",
     shell:
-        """(echo 'Use BfArM API and record response' > {output.answer}) 2> {log}"""
+        """
+        (
+            (echo 'Use BfArM API and record response' > {output.answer}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} reported
+        ) 2> {log}"""
 
 
 checkpoint determine_if_qc_is_necessary:
@@ -287,23 +311,37 @@ rule perform_qc:
     """
     input:
         data="results/{bucket_name}/decrypted/{submission_id}",
+        db_config="config/db.config.yaml",
     output:
         qc_results=temp("results/{bucket_name}/qc/{submission_id}"),
+    log:
+        "logs/{bucket_name}/perform_qc/{submission_id}.log",
     # handover: "TODO: handover to QC pipeline"
     shell:
-        "echo 'running fake qc...' > {output.qc_results}"
+        """
+        (
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} qcing
+            (echo 'running fake qc...' > {output.qc_results}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} qced
+        ) > {log} 2>&1
+        """
 
 
 rule clean_submission_from_inbox:
     input:
         ready_marker=get_ready_marker,
+        db_config="config/db.config.yaml",
     output:
         clean_results="results/{bucket_name}/clean_submission_from_inbox/{submission_id}",
     log:
         "logs/{bucket_name}/clean_submission_from_inbox/{submission_id}",
     shell:
         """
-        (grzctl clean --submission-id {wildcards.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) 2> {log}
+        (
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaning
+            (grzctl clean --submission-id {wildcards.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaned
+        ) 2> {log}
         """
 
 
