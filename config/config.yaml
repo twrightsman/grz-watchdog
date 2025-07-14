@@ -4,7 +4,7 @@ monitor:
 
 buckets:
   inbox:
-    inbox-le-1: "buckets/inbox-le-1.config.yaml"
-    inbox-le-2: "buckets/inbox-le-2.config.yaml"
-  consented: "buckets/consented.yaml"
-  nonconsented: "buckets/nonconsented.yaml"
+    inbox-le-1: "config/buckets/inbox-le-1.config.yaml"
+    inbox-le-2: "config/buckets/inbox-le-2.config.yaml"
+  consented: "config/buckets/consented.yaml"
+  nonconsented: "config/buckets/nonconsented.yaml"

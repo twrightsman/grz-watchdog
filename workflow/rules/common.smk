@@ -62,62 +62,18 @@ def stop_updater(timeout: float | None = None):
     print("Stopped updater.")
 
 
-def check_validation_flag_file(file) -> bool:
-    """
-    Reads the qc_flag file to determine if QC is necessary.
-    """
-    with open(file) as f:
-        return f.read().strip() == "true"
+def get_ready_marker(wildcards):
+    qc_flag_file = checkpoints.determine_if_qc_is_necessary.get(
+        bucket_name=wildcards.bucket_name, submission_id=wildcards.submission_id
+    ).output.needs_qc
 
+    with open(qc_flag_file) as f:
+        qc_needed = f.read().strip() == "true"
 
-def check_validation_flag(wildcards: Wildcards) -> bool:
-    """
-    Reads the qc_flag file to determine if QC is necessary.
-    """
-    bucket_name = wildcards.bucket_name
-    key = wildcards.key
-    return check_validation_flag_file(f"results/{bucket_name}/validation_flag/{key}")
-
-
-def get_pruefbericht_params(_wildcards: Wildcards, input_files: InputFiles):
-    if check_validation_flag_file(input_files.validation_flag):
-        return ""
+    if qc_needed:
+        return f"results/{wildcards.bucket_name}/qc/{wildcards.submission_id}"
     else:
-        return "--fail"
-
-
-def check_qc_flag(wildcards: Wildcards) -> bool:
-    """
-    Reads the qc_flag file to determine if QC is necessary.
-    """
-    bucket_name = wildcards.bucket_name
-    key = wildcards.key
-    with open(f"results/{bucket_name}/qc_flag/{key}") as f:
-        return f.read().strip() == "true"
-
-
-def check_consent_flag(wildcards: Wildcards) -> bool:
-    """
-    Reads the consent_flag file to determine if consent is given.
-    """
-    bucket_name = wildcards.bucket_name
-    key = wildcards.key
-    return check_consent_flag_file(f"results/{bucket_name}/consent_flag/{key}")
-
-
-def check_consent_flag_file(file) -> bool:
-    """
-    Reads the consent_flag file to determine if consent is given.
-    """
-    with open(file) as f:
-        return f.read().strip() == "true"
-
-
-def get_target_config_file(_wildcards: Wildcards, input_files: InputFiles) -> str:
-    if check_consent_flag_file(input_files.consent_flag):
-        return config["buckets"]["consented"]
-    else:
-        return config["buckets"]["nonconsented"]
+        return f"results/{wildcards.bucket_name}/pruefbericht_answer/{wildcards.submission_id}"
 
 
 def signal_handler(sig, frame):
