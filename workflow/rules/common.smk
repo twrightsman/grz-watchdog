@@ -5,6 +5,8 @@ import signal
 import subprocess
 import threading
 import time
+from random import randint
+from typing import Any
 
 from snakemake.io import Wildcards
 
@@ -46,8 +48,31 @@ def check_buckets():
                 )
             )
             print(available_submissions)
+
+            def select_for_qc(
+                submission: dict[str, Any], submissions: list[dict[str, Any]]
+            ) -> bool:
+                # TODO: filter submissions to current/last X weeks, pick N from that
+                qc_chance: int = 2
+                if randint(1, 100) <= qc_chance:
+                    return True
+                return False
+
             for available_submission in available_submissions:
-                INPUT_QUEUE.put(available_submission.submission_id)
+                submission_id = available_submission.submission_id
+                if select_for_qc(available_submission, available_submissions):
+                    target = f"results/{bucket_name}/target/with_qc/{submission_id}"
+                    print(
+                        f"Queueing QC path for {submission_id}: {target}",
+                        file=sys.stderr,
+                    )
+                else:
+                    target = f"results/{bucket_name}/target/without_qc/{submission_id}"
+                    print(
+                        f"Queueing non-QC path for {submission_id}: {target}",
+                        file=sys.stderr,
+                    )
+                INPUT_QUEUE.put(target)
 
             print(INPUT_QUEUE.qsize())
 
@@ -64,20 +89,6 @@ def stop_updater(timeout: float | None = None):
     INPUT_QUEUE.join()
     UPDATE_THREAD.join(timeout=timeout)
     print("Stopped updater.")
-
-
-def get_ready_marker(wildcards: Wildcards) -> str:
-    qc_flag_file = checkpoints.determine_if_qc_is_necessary.get(
-        bucket_name=wildcards.bucket_name, submission_id=wildcards.submission_id
-    ).output.needs_qc
-
-    with open(qc_flag_file) as f:
-        qc_needed = f.read().strip() == "true"
-
-    if qc_needed:
-        return f"results/{wildcards.bucket_name}/qc/{wildcards.submission_id}"
-    else:
-        return f"results/{wildcards.bucket_name}/pruefbericht_answer/{wildcards.submission_id}"
 
 
 def signal_handler(sig, frame):

@@ -22,34 +22,32 @@ include: "rules/common.smk"
 GHGA_PUBLIC_KEY = "GHGA_PUBLIC_KEY"
 GRZ_INTERNAL_PUBLIC_KEY = "GRZ_INTERNAL_PUBLIC_KEY"
 
-INPUT_QUEUE.put("tmp/queue-workaround")
-
-
-# This is a workaround for a bug (snakemake immediately exits)
-# that occurs _sometimes_ when the queue is initially empty.
-rule queue_initially_empty_workaround:
-    output:
-        temp("tmp/queue-workaround"),
-    shell:
-        """
-        sleep 30s
-        echo "done" > {output}
-        """
-
-
-# rule all:
-#     input:
-#         item=from_queue(INPUT_QUEUE, finish_sentinel=SENTINEL),
-#         running="running",
-#     default_target: True
-#
-#
-# rule start:
+# INPUT_QUEUE.put("tmp/queue-workaround")
+# # This is a workaround for a bug (snakemake immediately exits)
+# # that occurs _sometimes_ when the queue is initially empty.
+# rule queue_initially_empty_workaround:
 #     output:
-#         running=temp("running"),
-#     run:
-#         UPDATE_THREAD.start()
-#         print("true", file=open(output.running, "wt"))
+#         temp("tmp/queue-workaround"),
+#     shell:
+#         """
+#         sleep 30s
+#         echo "done" > {output}
+#         """
+
+
+rule all:
+    input:
+        item=from_queue(INPUT_QUEUE, finish_sentinel=SENTINEL),
+        running="running",
+    default_target: True
+
+
+rule start:
+    output:
+        running=temp("running"),
+    run:
+        UPDATE_THREAD.start()
+        print("true", file=open(output.running, "wt"))
 
 
 rule download_submission:
@@ -327,31 +325,52 @@ rule perform_qc:
         """
 
 
-rule clean_submission_from_inbox:
+rule clean_submission_from_inbox_with_qc:
     input:
-        ready_marker=get_ready_marker,
+        ready_marker="results/{bucket_name}/qc/{submission_id}",
         db_config="config/db.config.yaml",
     output:
-        clean_results="results/{bucket_name}/clean_submission_from_inbox/{submission_id}",
+        clean_results=temp(
+            "results/{bucket_name}/clean_submission_from_inbox/with_qc/{submission_id}"
+        ),
     log:
-        "logs/{bucket_name}/clean_submission_from_inbox/{submission_id}",
+        "logs/{bucket_name}/clean_submission_from_inbox/with_qc/{submission_id}.log",
     shell:
         """
         (
             grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaning
-            (grzctl clean --submission-id {wildcards.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) || grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error
+            (grzctl clean --submission-id {wildcards.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) || (grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error && echo 'false' > {output.clean_results})
             grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaned
-        ) 2> {log}
+        ) > {log} 2>&1
+        """
+
+
+rule clean_submission_from_inbox_without_qc:
+    input:
+        ready_marker="results/{bucket_name}/pruefbericht_answer/{submission_id}",
+        db_config="config/db.config.yaml",
+    output:
+        clean_results=temp(
+            "results/{bucket_name}/clean_submission_from_inbox/without_qc/{submission_id}"
+        ),
+    log:
+        "logs/{bucket_name}/clean_submission_from_inbox/without_qc/{submission_id}.log",
+    shell:
+        """
+        (
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaning
+            (grzctl clean --submission-id {wildcards.submission_id} --yes-i-really-mean-it && echo 'true' > {output.clean_results}) || (grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} error && echo 'false' > {output.clean_results})
+            grzctl db --config-file {input.db_config} submission update {wildcards.submission_id} cleaned
+        ) > {log} 2>&1
         """
 
 
 rule update_taetigkeitsbericht:
     """
-    Update the Taetigkeitsbericht with information from the respective submission.
+    Update the Taetigkeitsbericht with information from the submission DB.
     """
     input:
-        metadata="results/{bucket_name}/metadata/{submission_id}.json",
-        pruefbericht="results/{bucket_name}/pruefbericht/{submission_id}",
+        db_config="config/db.config.yaml",
     output:
         taetigkeitsbericht=temp(
             "results/{bucket_name}/taetigkeitsbericht/{submission_id}.pdf"
@@ -360,12 +379,12 @@ rule update_taetigkeitsbericht:
         "logs/{bucket_name}/update_taetigkeitsbericht/{submission_id}.log",
     shell:
         """
-        # (generate taetigkeitsbericht using {input.metadata} and {input.pruefbericht}, as well as some other data TBD) 2> {log}
+        # (generate taetigkeitsbericht using submission DB via {input.db_config}) 2> {log}
         echo "TODO" > {output.taetigkeitsbericht} 2> {log}
         """
 
 
-rule finalize_submission:
+rule finalize_submission_with_qc:
     """
     Target rule for each submission.
     This rule does not really do anything, except explicitly state what needs to happen (which inputs are required)
@@ -376,11 +395,11 @@ rule finalize_submission:
         pruefbericht="results/{bucket_name}/pruefbericht/{submission_id}",
         pruefbericht_answer="results/{bucket_name}/pruefbericht_answer/{submission_id}",
         taetigkeitsbericht="results/{bucket_name}/taetigkeitsbericht/{submission_id}.pdf",
-        clean_results="results/{bucket_name}/clean_submission_from_inbox/{submission_id}",
+        clean_results="results/{bucket_name}/clean_submission_from_inbox/with_qc/{submission_id}",
     output:
-        target="results/{bucket_name}/target/{submission_id}",
+        target="results/{bucket_name}/target/with_qc/{submission_id}",
     log:
-        "logs/{bucket_name}/finalize_submission/{submission_id}.log",
+        "logs/{bucket_name}/finalize_submission/with_qc/{submission_id}.log",
     shell:
         """
         (
@@ -389,6 +408,35 @@ rule finalize_submission:
                 echo "done" > {output.target}
             else
                 echo "fail" > {output.target}
+            fi
+        ) > {log} 2>&1
+        """
+
+
+rule finalize_submission_without_qc:
+    """
+    Target rule for each submission.
+    This rule does not really do anything, except explicitly state what needs to happen (which inputs are required)
+    in order for a submission to be considered "completed".
+    """
+    input:
+        archived="results/{bucket_name}/archived/{submission_id}",
+        pruefbericht_answer="results/{bucket_name}/pruefbericht_answer/{submission_id}",
+        taetigkeitsbericht="results/{bucket_name}/taetigkeitsbericht/{submission_id}.pdf",
+        clean_results="results/{bucket_name}/clean_submission_from_inbox/without_qc/{submission_id}",
+    output:
+        target="results/{bucket_name}/target/without_qc/{submission_id}",
+    log:
+        "logs/{bucket_name}/finalize_submission/without_qc/{submission_id}.log",
+    shell:
+        """
+        (
+            CLEANED=$(cat {input.clean_results})
+            if [[ "$CLEANED" == "true" ]]; then
+                echo "Submission {wildcards.submission_id} successfully finalized without QC." > {output.target}
+            else
+                echo "Submission {wildcards.submission_id} failed to finalize without QC." > {output.target}
+                exit 1
             fi
         ) > {log} 2>&1
         """
