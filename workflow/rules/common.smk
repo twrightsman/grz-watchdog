@@ -12,6 +12,10 @@ SENTINEL = object()
 INPUT_QUEUE: queue.Queue = queue.Queue()
 
 
+wildcard_constraints:
+    bucket_name=r"|".join(config["buckets"]["inbox"].keys()),
+
+
 def update_submission_queue(bucket_name: str, key: str):
     print(f"Updating submission queue for {bucket_name}/{key}")
     INPUT_QUEUE.put(f"results/{bucket_name}/target/{key}")
