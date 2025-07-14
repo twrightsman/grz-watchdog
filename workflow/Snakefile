@@ -323,6 +323,7 @@ rule update_taetigkeitsbericht:
     shell:
         """
         # (generate taetigkeitsbericht using {input.metadata} and {input.pruefbericht}, as well as some other data TBD) 2> {log}
+        echo "TODO" > {output.taetigkeitsbericht} 2> {log}
         """
 
 
