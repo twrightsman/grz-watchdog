@@ -270,35 +270,6 @@ rule report_pruefbericht_to_bfarm:
         ) 2> {log}"""
 
 
-checkpoint determine_if_qc_is_necessary:
-    """
-    Flip a biased coin to determine if QC is necessary and/or check submission DB
-    """
-    input:
-        validation_flag="results/{bucket_name}/validation_flag/{submission_id}",
-        pruefbericht="results/{bucket_name}/pruefbericht_answer/{submission_id}",
-    output:
-        needs_qc=temp("results/{bucket_name}/qc_flag/{submission_id}"),
-    log:
-        "logs/{bucket_name}/determine_if_qc_is_necessary/{submission_id}.log",
-    shell:
-        """
-        (
-            IS_VALID=$(cat {input.validation_flag})
-            # TODO replace with query in submission DB and sophisticated logic
-            if [[ "$IS_VALID" != "true" ]]; then
-                echo "false" > {output.needs_qc}
-            else
-                if [ $(shuf -i 1-100 -n 1) -le 2 ]; then
-                    echo "true" > {output.needs_qc}
-                else
-                    echo "false" > {output.needs_qc}
-                fi
-            fi
-        ) > {log} 2>&1
-        """
-
-
 rule perform_qc:
     """
     Perform QC on the submission using the QC nextflow pipeline.
